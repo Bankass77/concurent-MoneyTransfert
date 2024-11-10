@@ -1,0 +1,5 @@
+com/concurent_MoneyTransfert/MoneyTransfert/model/Compte.class
+com/concurent_MoneyTransfert/MoneyTransfert/MoneyTransfertApplication.class
+com/concurent_MoneyTransfert/MoneyTransfert/repository/CompteRepository.class
+com/concurent_MoneyTransfert/MoneyTransfert/controller/CompteController.class
+com/concurent_MoneyTransfert/MoneyTransfert/service/CompteService.class
