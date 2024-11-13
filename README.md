@@ -41,7 +41,7 @@ Prérequis
 * PostgreSQL (configuré dans application.properties)
 ## Étapes
 1. Cloner le dépôt :
- git clone https://github.com/bankass77/concurrent-money-transfer.git
+ git clone https://github.com/Bankass77/concurent-MoneyTransfert.git
 cd concurrent-money-transfer
 2. Configurer PostgreSQL :
 Créez une base de données PostgreSQL et mettez à jour le fichier application.properties avec vos informations de connexion :
