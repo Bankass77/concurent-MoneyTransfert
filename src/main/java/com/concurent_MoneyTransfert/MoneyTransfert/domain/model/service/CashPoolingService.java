@@ -32,7 +32,7 @@ public class CashPoolingService implements CashPoolingUseCase {
      * Constructeur pour injecter les dépendances nécessaires.
      *
      * @param jpaCompteRepository le repository pour gérer les comptes
-     * @param transactionService le service pour gérer les transactions
+     * @param transactionService  le service pour gérer les transactions
      */
     public CashPoolingService(JpaCompteRepository jpaCompteRepository, TransactionService transactionService) {
         this.jpaCompteRepository = jpaCompteRepository;
@@ -55,7 +55,7 @@ public class CashPoolingService implements CashPoolingUseCase {
 
         if (compteSourceOpt.isPresent() && compteDestinationOpt.isPresent()) {
             CompteEntity compteSource = CompteMapper.toEntity(compteSourceOpt.get());
-            CompteEntity compteDestination =CompteMapper.toEntity( compteDestinationOpt.get());
+            CompteEntity compteDestination = CompteMapper.toEntity(compteDestinationOpt.get());
             if (CompteMapper.toDomain(compteSource).retirer(montant)) {
                 CompteMapper.toDomain(compteDestination).deposer(montant);
                 jpaCompteRepository.save(compteDestination);
@@ -100,11 +100,11 @@ public class CashPoolingService implements CashPoolingUseCase {
         if (centralisateur.isEmpty()) {
             throw new IllegalArgumentException("Compte centralisateur introuvable.");
         }
-
         for (Compte participant : jpaCompteRepository.getComptesParticipants(idCentralisateur)) {
             operation.accept(CompteMapper.toEntity(centralisateur.get()), CompteMapper.toEntity(participant));
-            creerOuMettreAJourCompte( CompteMapper.toEntity(participant));
+            creerOuMettreAJourCompte(CompteMapper.toEntity(participant));
         }
+
         creerOuMettreAJourCompte(CompteMapper.toEntity(centralisateur.get()));
     }
 
@@ -115,10 +115,11 @@ public class CashPoolingService implements CashPoolingUseCase {
      * @param calculInterert la fonction de calcul d'intérêt appliquée sur chaque participant
      * @return la somme des intérêts calculés
      */
-    public double calculerInteretTotal(Long idCentralisateur, Function<Compte, Double> calculInterert) {
+    private double calculerInteretTotal(Long idCentralisateur, Function<CompteEntity, Double> calculInterert) {
         Optional<Compte> centralisateur = jpaCompteRepository.getCompte(idCentralisateur);
-        if (centralisateur.isPresent()){
+        if (centralisateur.isPresent()) {
             return centralisateur.get().getComptesParticipants().stream()
+                    .map(CompteMapper::toEntity)
                     .map(calculInterert)
                     .reduce(0.0, Double::sum);
         }
@@ -133,22 +134,15 @@ public class CashPoolingService implements CashPoolingUseCase {
     @Transactional
     public void consoliderSoldes(Long idCentralisateur) {
         Optional<Compte> centralisateur = jpaCompteRepository.getCompte(idCentralisateur);
-        if (centralisateur.isPresent()){
-            if (!"CENTRALISATEUR".equals(centralisateur.get().getTypeCompte())) {
-                throw new IllegalArgumentException("Le compte n'est pas un centralisateur.");
-            }
+
+        if (centralisateur.isPresent() && "CENTRALISATEUR".equals(centralisateur.get().getTypeCompte())) {
+            appliquerSurChaqueCompteParticipant(idCentralisateur, (centralisateurCompte, participant) -> {
+                centralisateurCompte.setSolde(centralisateurCompte.getSolde() + participant.getSolde());
+                participant.setSolde(0); // Réinitialisation du solde du participant
+            });
+        } else {
+            throw new IllegalArgumentException("Le compte n'est pas un centralisateur.");
         }
-        double totalSolde = 0.0;
-       if (centralisateur.isPresent()){
-            totalSolde= centralisateur.get().getSolde();
-           for (Compte participant : centralisateur.get().getComptesParticipants()) {
-               totalSolde += participant.getSolde();
-               participant.setSolde(0);
-               creerOuMettreAJourCompte(CompteMapper.toEntity(participant));
-           }
-           centralisateur.get().setSolde(totalSolde);
-           creerOuMettreAJourCompte(CompteMapper.toEntity(centralisateur.get()));
-       }
     }
 
     /**
@@ -178,30 +172,37 @@ public class CashPoolingService implements CashPoolingUseCase {
      */
     public void equilibrerCompte(Long idCentralisateur) {
         transactionService.executeTransaction(() -> {
-            Optional<Compte> compteCentralisateur = jpaCompteRepository.getCompte(idCentralisateur);
+            Optional<Compte> compteCentralisateurOpt = jpaCompteRepository.getCompte(idCentralisateur);
 
-            for (Compte participant : jpaCompteRepository.getComptesParticipants(idCentralisateur)) {
-                if (participant.estDefict() && compteCentralisateur.isPresent()) {
-                    double montant = participant.getSeuilMaximum() - participant.getSolde();
-                    compteCentralisateur.get().debiter(montant);
-                } else if (participant.estExcedentaire() && compteCentralisateur.isPresent()) {
-                    double montant = participant.getSolde() - participant.getSeuilMaximum();
-                    participant.debiter(montant);
-                    compteCentralisateur.get().crediter(montant);
+            if (compteCentralisateurOpt.isPresent()) {
+                Compte compteCentralisateur = compteCentralisateurOpt.get();
+
+                for (Compte participant : jpaCompteRepository.getComptesParticipants(idCentralisateur)) {
+                    double montantAjuste = calculMontantAjuste(CompteMapper.toEntity(compteCentralisateur), CompteMapper.toEntity(participant));
+
+                    // Appliquer l'ajustement en fonction du montant calculé
+                    if (montantAjuste > 0) {
+                        compteCentralisateur.setSolde(compteCentralisateur.getSolde() - montantAjuste);
+                        participant.setSolde(participant.getSolde() + montantAjuste);
+                    } else if (montantAjuste < 0) {
+                        participant.setSolde(participant.getSolde() - montantAjuste);
+                        compteCentralisateur.setSolde(compteCentralisateur.getSolde() + montantAjuste);
+                    }
+
+                    // Sauvegarde les comptes mis à jour
+                    creerOuMettreAJourCompte(CompteMapper.toEntity(compteCentralisateur));
                     creerOuMettreAJourCompte(CompteMapper.toEntity(participant));
                 }
             }
-            compteCentralisateur.ifPresent(compte -> creerOuMettreAJourCompte(CompteMapper.toEntity(compte)));
         });
     }
-
     /**
      * Crée ou met à jour un compte en établissant les relations avec le centralisateur si nécessaire.
      *
      * @param compteEntity l'entité du compte à enregistrer
      * @return le compte enregistré
      */
-    public Compte creerOuMettreAJourCompte(CompteEntity compteEntity) {
+    private Compte creerOuMettreAJourCompte(CompteEntity compteEntity) {
         if (compteEntity.getCompteCentralisateur() != null && compteEntity.getCompteCentralisateur().getId() != null) {
             Compte centralisateur = jpaCompteRepository.getCompte(compteEntity.getCompteCentralisateur().getId())
                     .orElseThrow(() -> new IllegalArgumentException("Compte centralisateur introuvable."));
@@ -209,4 +210,36 @@ public class CashPoolingService implements CashPoolingUseCase {
         }
         return jpaCompteRepository.save(compteEntity);
     }
+
+    /**
+     * Génère un rapport des intérêts cumulés pour un centralisateur et ses participants.
+     *
+     * @param idCentralisateur l'ID du compte centralisateur
+     * @return le total des intérêts cumulés pour tous les participants du centralisateur
+     */
+    public double genererRapportInteret(Long idCompte) {
+        Optional<Compte> compte = jpaCompteRepository.getCompte(idCompte);
+
+        if (compte.isPresent()) {
+            Compte compteActuel = compte.get();
+
+            // Vérifie si le compte est un centralisateur avec des participants
+            if ("CENTRALISATEUR".equals(compteActuel.getTypeCompte()) &&
+                    !compteActuel.getComptesParticipants().isEmpty()) {
+                // Calculer l'intérêt sur tous les participants
+                return calculerInteretTotal(idCompte, c -> c.getSolde() * (c.getTauxInteret() / 100));
+            } else {
+                // Calculer l'intérêt sur un compte sans participants
+                return calculerInteretSimple(compteActuel);
+            }
+        }
+
+        return 0.0;
+    }
+
+    // Méthode pour calculer l'intérêt d'un compte sans participants
+    public double calculerInteretSimple(Compte compte) {
+        return compte.getSolde() * (compte.getTauxInteret() / 100);
+    }
+
 }

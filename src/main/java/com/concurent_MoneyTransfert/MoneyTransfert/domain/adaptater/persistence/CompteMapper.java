@@ -25,6 +25,7 @@ public class CompteMapper {
         compte.setLimiteDecouvert(compteEntity.getLimiteDecouvert());
         compte.setSeuilMaximum(compteEntity.getSeuilMaximum());
         compte.setSeuilMinimum(compteEntity.getSeuilMinimum());
+        compte.setTauxInteret(compteEntity.getTauxInteret());
         compte.setVersion(compteEntity.getVersion());
 
         // Conversion du compte centralisateur
@@ -61,6 +62,7 @@ public class CompteMapper {
         compteEntity.setTitulaire(compte.getTitulaire());
         compteEntity.setNumeroCompte(compte.getNumeroCompte());
         compteEntity.setTypeCompte(compte.getTypeCompte());
+        compteEntity.setTauxInteret(compte.getTauxInteret());
         compteEntity.setSolde(compte.getSolde());
         compteEntity.setStatut(compte.getStatut());
         compteEntity.setDateOuverture(compte.getDateOuverture());

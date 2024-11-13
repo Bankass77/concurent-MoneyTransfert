@@ -30,5 +30,4 @@ public class cashPoolingScheduler {
                 .orElseThrow(() -> new IllegalStateException("Compte centralisateur introuvable"));
     }
 
-
 }

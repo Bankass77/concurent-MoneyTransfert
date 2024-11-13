@@ -16,10 +16,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.concurent_MoneyTransfert.MoneyTransfert.domain.adaptater.persistence.CompteEntity;
 import com.concurent_MoneyTransfert.MoneyTransfert.domain.model.Compte;
 import com.concurent_MoneyTransfert.MoneyTransfert.domain.model.service.CashPoolingService;
+
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Contrôleur REST pour gérer les opérations de cash pooling et de transfert entre comptes.
  * Fournit des points d'entrée pour créer, obtenir et transférer des comptes, ainsi que pour consolider les soldes.
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/pooling")
 public class CashPoolingController {
@@ -92,4 +96,13 @@ public class CashPoolingController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
     }
+
+    @GetMapping("/rapport-interet/{idCentralisateur}")
+    public ResponseEntity<Double> obtenirRapportInteret(@PathVariable Long idCentralisateur) {
+        Optional<Compte> compte = cashPoolingService.obtenirCompte(idCentralisateur);
+        double totalInteret = cashPoolingService.genererRapportInteret(idCentralisateur);
+        log.info("Total intérêt lié à cet compte {} d'id :{} est de : {} ",compte.get().getTypeCompte(), idCentralisateur, totalInteret);
+        return ResponseEntity.ok(totalInteret);
+    }
+
 }
